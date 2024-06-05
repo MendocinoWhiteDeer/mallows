@@ -1,0 +1,44 @@
+* License
+
+This file is part of mallows.
+Copyright (C) 2024 Taylor Wampler 
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+* Usage
+
+The default Chez Scheme REPL, or 'expeditor', has I/O blocking.
+This means you can't type out expressions to evaluate while the program is running concurrently.
+mallows provides access to a non-blocking Chez Scheme REPP (read-evaluate-print-procedure).
+This procedure allows the creation of a non-blocking REPL when placed inside a loop.
+The goal is to assist with interactive programs, simulations, and games whose functionality may be altered as the program runs.
+
+Here is a basic example of a top-level program for a short-lived test loop.
+
+#+BEGIN_SRC scheme
+  (import (mallows))
+  (define test-no-block-repl
+    (lambda ()
+      (letrec*
+	  ([start-time (current-time)]
+	   [test-loop
+	    (lambda ()
+	      (when (< (time-second (time-difference (current-time) start-time)) 10)
+		(no-block-repp (console-input-port) (console-output-port))
+		(test-loop)))])
+	(test-loop))))
+  (test-no-block-repl)
+#+END_SRC
+
+Currently, mallows is barebones, but I'd like to add more features as time goes on.
