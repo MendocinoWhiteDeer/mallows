@@ -15,9 +15,61 @@
 ;;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 (library (mallows)
-  (export no-block-repp)
+  (export trie-insert! trie-completion-list no-block-repp)
   (import (chezscheme))
+
+  (define-record-type trie-node (fields word-end? child-nodes))
+  (define trie (make-trie-node #f (make-eq-hashtable 32)))
+
+  (define trie-insert!
+    (lambda (word-string)
+      (letrec
+	  ([word-char-list (string->list word-string)]
+	   [fn!
+	    (lambda (node char-list)
+	      (if (and (trie-node? node) (pair? char-list))
+		  (let ([c (car char-list)] [child-nodes (trie-node-child-nodes node)])
+		    (unless (hashtable-contains? child-nodes c)
+		      (hashtable-set! child-nodes c (make-trie-node (null? (cdr char-list)) (make-eq-hashtable 8))))
+		    (fn! (hashtable-ref child-nodes c #f) (cdr char-list)))))])
+	(fn! trie word-char-list))))
+
+  ;; Return last trie node when given a prefix, #f if the prefix is not part of any word in the trie  
+  (define trie-end-node
+    (lambda (prefix-string)
+      (letrec
+	  ([prefix-char-list (string->list prefix-string)]
+	   [fn
+	    (lambda (node prefix-char-list)
+	      (cond
+	       [(not (trie-node? node)) #f]
+	       [(pair? prefix-char-list)
+		(let ([c (car prefix-char-list)])
+		  (fn (hashtable-ref (trie-node-child-nodes node) c #f) (cdr prefix-char-list)))]
+	       [else node]))])
+	   (fn trie prefix-char-list))))
   
+  (define trie-completion-list
+    (lambda (word-prefix)
+      (letrec
+	  ([prefix-end-node (trie-end-node word-prefix)]
+	   [completion-list '()]
+	   [fn
+	    (lambda (node suffix-char-list)
+	      (if (trie-node? node)
+		  (let-values ([(child-chars child-nodes) (hashtable-entries (trie-node-child-nodes node))])
+		    (letrec* ([len (vector-length child-chars)] [i 0]
+			      [iterate-nodes
+			       (lambda ()
+				 (when (< i len)
+				   (let ([c (vector-ref child-chars i)] [n (vector-ref child-nodes i)])
+				     (fn n (cons c suffix-char-list)))))])
+		      (if (trie-node-word-end? node)
+			  (set! completion-list (cons (string-append word-prefix (list->string (reverse suffix-char-list))) completion-list)))
+		      (iterate-nodes)))))])
+	(fn prefix-end-node '())
+	completion-list)))
+		       
   (define no-block-read
     (lambda (p)
       (letrec
@@ -25,12 +77,12 @@
 	    (lambda (nest-stack expr)
 	      (let ([c (peek-char p)])
 		(cond
-		 ;; when eof return
+		 ;; When eof return
 		 [(eof-object? c)
 		  (if (and (null? nest-stack) (pair? expr))
 		      (reverse expr)
 		      '())]
-		 ;; when newline return
+		 ;; When newline return
 		 [(char=? c #\newline)
 		  (read-char p)
 		  (if (and (null? nest-stack) (pair? expr))
@@ -71,6 +123,7 @@
 		(write-char (car char-list) p)
 		(fn (cdr char-list))))])
 	(write expr output)
+	(fn (string->list "EVAL: "))
 	(fn (string->list [get-output-string output]))
 	(write-char #\newline p)
 	(flush-output-port p))))
